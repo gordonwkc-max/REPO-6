@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Buyback Counter — 20s rehearsal</title>
+<style>
+  :root{
+    --bg:#0f1410; --panel:#1a211c; --panel2:#232d26; --line:#3a4a3f;
+    --ink:#e8f0e9; --dim:#9fb3a6; --accent:#3ddc5a; --accent2:#ffd23f;
+    --danger:#ff5a5a; --btn:#2b3a30;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  body{padding:16px;max-width:1020px;margin:0 auto}
+  h1{font-size:20px;letter-spacing:.06em;margin:4px 0 2px}
+  h1 .em{color:var(--accent)}
+  .sub{color:var(--dim);font-size:12px;margin:0 0 12px}
+  .stage{position:relative;border:2px solid var(--line);background:#79a6ff;
+    box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  .hud{position:absolute;left:10px;top:8px;display:flex;gap:8px;align-items:center;
+    font-size:12px;text-shadow:0 1px 0 rgba(0,0,0,.6)}
+  .hud .pill{background:rgba(10,14,11,.72);border:1px solid rgba(255,255,255,.18);
+    padding:3px 8px}
+  .hud .pill b{color:var(--accent2)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+  button{font:inherit;font-size:13px;color:var(--ink);background:var(--btn);
+    border:2px solid var(--line);padding:8px 12px;cursor:pointer;
+    box-shadow:0 3px 0 #0a0d0b}
+  button:active{transform:translateY(2px);box-shadow:0 1px 0 #0a0d0b}
+  button.active{background:var(--accent);color:#06210d;border-color:#1f7a33;font-weight:700}
+  button.warn{border-color:#7a3a2a}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input[type=range]{flex:1 1 260px;accent-color:var(--accent);height:28px}
+  .tread{font-size:13px;min-width:118px;text-align:right}
+  .panel{background:var(--panel);border:2px solid var(--line);padding:10px 12px;margin:10px 0}
+  .panel h2{font-size:12px;letter-spacing:.12em;color:var(--dim);margin:0 0 8px}
+  .origin{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .origin label{font-size:12px;color:var(--dim);display:flex;gap:6px;align-items:center}
+  .origin input{width:84px;font:inherit;font-size:13px;background:#0d120e;color:var(--ink);
+    border:2px solid var(--line);padding:6px 8px}
+  .status{font-size:12px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+  .status b{color:var(--ink)}
+  .hint{font-size:12px;color:var(--dim)}
+  .kbd{border:1px solid var(--line);padding:0 5px;background:#0d120e}
+</style>
+</head>
+<body>
+<h1>THE BUYBACK COUNTER <span class="em">◆</span></h1>
+<p class="sub">20-second Minecraft-inspired rehearsal · merchant · customer · emerald · trapdoor</p>
+
+<div class="stage">
+  <canvas id="scene" width="960" height="540" aria-label="The Buyback Counter scene"></canvas>
+  <div class="hud">
+    <span class="pill">t <b id="hudTime">0.00</b>s</span>
+    <span class="pill">branch <b id="hudBranch">pending</b></span>
+    <span class="pill">held <b id="hudHeld">no</b></span>
+  </div>
+</div>
+
+<div class="row" aria-label="Playback controls">
+  <button id="btnPlay" type="button">▶ Play</button>
+  <input id="seek" type="range" min="0" max="20" step="0.01" value="0" aria-label="Seek 0 to 20 seconds">
+  <span class="tread" id="tread">0.00 / 20.00</span>
+  <button id="sp05" type="button">0.5x</button>
+  <button id="sp1" type="button" class="active">1x</button>
+  <button id="sp2" type="button">2x</button>
+</div>
+
+<div class="row" aria-label="Scene inputs">
+  <button id="btnTake" type="button">TAKE</button>
+  <button id="btnReturn" type="button">RETURN</button>
+  <button id="btnInspect" type="button">INSPECT REAR</button>
+  <button id="btnReset" type="button" class="warn">Reset</button>
+  <span class="hint">Inputs accepted only at <span class="kbd">4 ≤ t &lt; 12</span>. Ending latches at t=12. Trap opens at t=14 (trap only).</span>
+</div>
+
+<div class="panel">
+  <h2>WORLD ORIGIN (X / Y / Z) — scene translates together, camera follows</h2>
+  <div class="origin">
+    <label>X <input id="ox" type="number" step="1" value="0"></label>
+    <label>Y <input id="oy" type="number" step="1" value="0"></label>
+    <label>Z <input id="oz" type="number" step="1" value="0"></label>
+    <span class="hint">Default origin [0, 0, 0]. Actor coordinates in <span class="kbd">sceneBench.evaluate</span> are world coordinates (base + origin).</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>STATE</h2>
+  <div class="status">
+    <span>branch <b id="stBranch">pending</b></span>
+    <span>held <b id="stHeld">false</b></span>
+    <span>inspected <b id="stInsp">false</b></span>
+    <span>trapOpen <b id="stTrap">false</b></span>
+    <span>inputs <b id="stInputs">0</b></span>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   The Buyback Counter — deterministic 20s scene core + UI.
+   No network, no libraries. Opens from file://.
+   ============================================================ */
+
+// ---------- pure helpers (deterministic, no DOM, no randomness) ----------
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t){ return a + (b - a) * t; }
+function smoothstep(e0, e1, x){
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+function isFiniteNum(v){ return typeof v === "number" && Number.isFinite(v); }
+
+const ACCEPTED = { take: true, return: true, inspect: true };
+
+/* Compute full deterministic state from (time, actions, origin).
+   - Clamps time to [0,20].
+   - Considers only accepted actions (4 <= time < 12, known type) with
+     time <= requested time, ordered by time then input-array order.
+   - Ignores unknown types.
+   - Does not mutate arguments (copies).
+   - Returns { snapshot, t, origin, lastHeldChangeTime, inspectTime }.
+   Snapshot = { branch, held, inspected, trapOpen,
+                actors: { merchant:[x,y,z], customer:[x,y,z], emerald:[x,y,z] } }
+   Actor coordinates are world coordinates (base + origin).
+*/
+function computeFull(timeRaw, actionsRaw, originRaw){
+  const t = isFiniteNum(timeRaw) ? clamp(timeRaw, 0, 20) : 0;
+
+  let origin = [0, 0, 0];
+  if (Array.isArray(originRaw) && originRaw.length >= 3 &&
+      isFiniteNum(originRaw[0]) && isFiniteNum(originRaw[1]) && isFiniteNum(originRaw[2])){
+    origin = [originRaw[0], originRaw[1], originRaw[2]];
+  }
+
+  const actsIn = Array.isArray(actionsRaw) ? actionsRaw.slice() : [];
+  const accepted = [];
+  for (let i = 0; i < actsIn.length; i++){
+    const a = actsIn[i];
+    if (!a || typeof a !== "object") continue;
+    const at = a.time, ty = a.type;
+    if (!isFiniteNum(at)) continue;
+    if (typeof ty !== "string" || !ACCEPTED[ty]) continue; // ignore unknown
+    if (!(at >= 4 && at < 12)) continue;                    // acceptance window
+    accepted.push({ time: at, type: ty, idx: i });
+  }
+  accepted.sort((p, q) => (p.time - q.time) || (p.idx - q.idx));
+
+  let held = false, inspected = false;
+  let lastHeldChangeTime = null, inspectTime = null;
+  for (let i = 0; i < accepted.length; i++){
+    const a = accepted[i];
+    if (!(a.time <= t)) continue;
+    if (a.type === "take"){ if (!held){ held = true; lastHeldChangeTime = a.time; } }
+    else if (a.type === "return"){ if (held){ held = false; lastHeldChangeTime = a.time; } }
+    else if (a.type === "inspect"){ if (!inspected){ inspected = true; inspectTime = a.time; } }
+  }
+
+  let branch;
+  if (t < 12) branch = "pending";
+  else if (inspected) branch = "exposed";
+  else if (held) branch = "safe";
+  else branch = "trap";
+
+  const trapOpen = (branch === "trap" && t >= 14);
+
+  // ---- base positions (before origin) ----
+  const m = merchantBase(t, branch);
+  const c = customerBase(t, branch);
+  const e = emeraldBase(t, held, branch, lastHeldChangeTime, c);
+
+  const snapshot = {
+    branch: branch,
+    held: held,
+    inspected: inspected,
+    trapOpen: trapOpen,
+    actors: {
+      merchant: [m[0] + origin[0], m[1] + origin[1], m[2] + origin[2]],
+      customer: [c[0] + origin[0], c[1] + origin[1], c[2] + origin[2]],
+      emerald:  [e[0] + origin[0], e[1] + origin[1], e[2] + origin[2]]
+    }
+  };
+  return { snapshot, t, origin, lastHeldChangeTime, inspectTime, accepted };
+}
+
+function merchantBase(t, branch){
+  let x = -3.0, y = 0;
+  x += 0.10 * Math.sin(t * 1.8);
+  y += 0.05 * Math.sin(t * 2.1);
+  if (t < 4){
+    x += 0.18 * Math.sin(Math.PI * t / 4); // offer lean in/out
+  } else if (t < 12){
+    x += 0.08 * Math.sin(t * 3.0);         // distracting sway
+  } else {
+    if (branch === "safe"){
+      const s = smoothstep(12, 13, t); x -= 0.15 * s; y -= 0.12 * s; // slump
+    } else if (branch === "exposed"){
+      const s = smoothstep(12, 13, t); x += 0.05 * Math.sin(t * 22) * s; y -= 0.04 * s; // nervous shake
+    } else if (branch === "trap"){
+      if (t >= 14){
+        const dt = t - 14;
+        y += 0.28 * Math.abs(Math.sin(dt * 4.0)) * Math.exp(-dt * 0.35); // celebrate hops
+        x += 0.08 * smoothstep(14, 14.5, t);
+      } else {
+        x += 0.03 * Math.sin(t * 2); // frozen anticipation
+      }
+    }
+  }
+  return [x, y, 0];
+}
+
+function customerBase(t, branch){
+  let x = 3.0, y = 0;
+  x += 0.06 * Math.sin(t * 1.6 + 0.5);
+  x -= 0.30 * smoothstep(0, 2, t); // step in
+  if (t >= 4 && t < 12) x += 0.05 * Math.sin(t * 3.2); // hesitation
+  if (t >= 12){
+    if (branch === "trap"){
+      if (t >= 14){
+        const p = Math.min(1, (t - 14) / 1.0);
+        y = -2.6 * p * p; // accelerating fall into pit
+        x += 0.05 * p;
+      } else {
+        y -= 0.06 * smoothstep(12, 14, t); // crouch / anticipation
+      }
+    } else if (branch === "safe"){
+      const dt = t - 12;
+      y += 0.22 * Math.abs(Math.sin(dt * 3.5)) * Math.exp(-dt * 0.45); // triumphant hops
+      x -= 0.05 * smoothstep(12, 13, t);
+    } else if (branch === "exposed"){
+      x -= 0.18 * smoothstep(12, 13, t); // lean in to point
+      y += 0.05 * Math.abs(Math.sin((t - 12) * 2.5)) * Math.exp(-(t - 12) * 0.5);
+    }
+  }
+  return [x, y, 0];
+}
+
+function emeraldBase(t, held, branch, lastHeldChangeTime, customerPos){
+  // counter position
+  let cx = 0, cy = 1.15;
+  cx += 0.04 * Math.sin(t * 2.8);
+  cy += 0.04 * Math.sin(t * 2.8 + 1);
+  if (t >= 4 && t < 12 && !held){
+    cx += 0.28 * Math.sin(t * 4.5);              // warning wobble toward trapdoor
+    cy += 0.14 * Math.abs(Math.sin(t * 4.5));    // hopping to warn
+  }
+  if (t >= 12 && !held){
+    if (branch === "exposed"){ cx += 0.22 * smoothstep(12, 13, t); cy += 0.05 * smoothstep(12, 13, t); }
+    else if (branch === "trap"){ cy -= 0.03 * smoothstep(12, 14, t); }
+  }
+  // hand position
+  let hx = customerPos[0] - 0.55 + 0.03 * Math.sin(t * 2.5);
+  let hy = customerPos[1] + 1.05 + 0.04 * Math.sin(t * 2.8);
+  if (branch === "safe" && t >= 12) hy += 0.25 * smoothstep(12, 13, t);
+
+  // slide progress (0 = counter, 1 = hand)
+  let prog = 0;
+  if (held){
+    if (lastHeldChangeTime == null) prog = 1;
+    else { const p = clamp((t - lastHeldChangeTime) / 0.45, 0, 1); prog = 1 - Math.pow(1 - p, 3); }
+  } else {
+    if (lastHeldChangeTime == null) prog = 0;
+    else { const p = clamp((t - lastHeldChangeTime) / 0.45, 0, 1); prog = 1 - (1 - Math.pow(1 - p, 3)); }
+  }
+  return [cx + (hx - cx) * prog, cy + (hy - cy) * prog, 0];
+}
+
+// ---------- app state ----------
+let currentTime = 0;
+let playing = false;
+let speed = 1;
+let recordedInputs = []; // [{time, type}]
+let origin = [0, 0, 0];  // default origin
+
+const $ = (id) => document.getElementById(id);
+const canvas = $("scene");
+const ctx = canvas.getContext("2d");
+
+function currentFull(){
+  return computeFull(currentTime, recordedInputs, origin);
+}
+
+function addInput(type){
+  if (!(currentTime >= 4 && currentTime < 12)) return; // only accepted in window
+  // discard inputs after that time, then record
+  recordedInputs = recordedInputs.filter(a => !(a.time > currentTime));
+  recordedInputs.push({ time: currentTime, type: type });
+  render();
+}
+
+function resetAll(){
+  playing = false;
+  currentTime = 0;
+  recordedInputs = [];
+  syncUI();
+  render();
+}
+
+function syncUI(){
+  $("btnPlay").textContent = playing ? "⏸ Pause" : "▶ Play";
+  $("seek").value = String(currentTime);
+  $("tread").textContent = currentTime.toFixed(2) + " / 20.00";
+  $("sp05").classList.toggle("active", speed === 0.5);
+  $("sp1").classList.toggle("active", speed === 1);
+  $("sp2").classList.toggle("active", speed === 2);
+  $("ox").value = String(origin[0]);
+  $("oy").value = String(origin[1]);
+  $("oz").value = String(origin[2]);
+}
+
+function render(){
+  const full = currentFull();
+  const snap = full.snapshot;
+  const t = full.t;
+  drawScene(t, snap, full);
+  // HUD / status
+  $("hudTime").textContent = t.toFixed(2);
+  $("hudBranch").textContent = snap.branch;
+  $("hudHeld").textContent = snap.held ? "yes" : "no";
+  $("stBranch").textContent = snap.branch;
+  $("stHeld").textContent = String(snap.held);
+  $("stInsp").textContent = String(snap.inspected);
+  $("stTrap").textContent = String(snap.trapOpen);
+  $("stInputs").textContent = String(recordedInputs.length);
+  $("tread").textContent = t.toFixed(2) + " / 20.00";
+  if (document.activeElement !== $("seek")) $("seek").value = String(t);
+}
+
+// ---------- drawing ----------
+const W = 960, H = 540;
+const SCALE = 72;
+const CX = 480, GROUND_Y = 392;
+function sx(wx){ return CX + wx * SCALE; }
+function sy(wy){ return GROUND_Y - wy * SCALE; }
+
+function rect(wx, wy, w, h, color){
+  ctx.fillStyle = color;
+  ctx.fillRect(sx(wx), sy(wy + h), w * SCALE, h * SCALE);
+}
+function rectPx(x, y, w, h, color){
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawScene(t, snap, full){
+  const branch = snap.branch, held = snap.held, inspected = snap.inspected, trapOpen = snap.trapOpen;
+  // base coords (world - origin) for camera-follow framing
+  const m = [snap.actors.merchant[0] - origin[0], snap.actors.merchant[1] - origin[1], snap.actors.merchant[2] - origin[2]];
+  const c = [snap.actors.customer[0] - origin[0], snap.actors.customer[1] - origin[1], snap.actors.customer[2] - origin[2]];
+  const e = [snap.actors.emerald[0] - origin[0], snap.actors.emerald[1] - origin[1], snap.actors.emerald[2] - origin[2]];
+
+  // sky
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#7db4ff"); g.addColorStop(0.55, "#bfe3ff"); g.addColorStop(1, "#e8f6d8");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // sun (blocky)
+  rectPx(760, 40, 64, 64, "#ffe066"); rectPx(752, 48, 80, 48, "#ffe066");
+  // clouds (blocky, drift with t)
+  drawCloud(120 + 8 * Math.sin(t * 0.3), 70);
+  drawCloud(420 + 10 * Math.sin(t * 0.22 + 2), 46);
+  drawCloud(640 + 6 * Math.sin(t * 0.27 + 4), 96);
+  // distant hills
+  ctx.fillStyle = "#8fd07a";
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y);
+  ctx.quadraticCurveTo(180, GROUND_Y - 120, 360, GROUND_Y);
+  ctx.quadraticCurveTo(540, GROUND_Y - 90, 720, GROUND_Y);
+  ctx.quadraticCurveTo(840, GROUND_Y - 60, 960, GROUND_Y);
+  ctx.lineTo(960, GROUND_Y); ctx.lineTo(0, GROUND_Y); ctx.closePath(); ctx.fill();
+  // ground: grass top + dirt
+  rectPx(0, GROUND_Y, W, 18, "#5da53d");
+  rectPx(0, GROUND_Y + 18, W, H - GROUND_Y - 18, "#7a4a2b");
+  // dirt speckles (deterministic grid)
+  ctx.fillStyle = "#5e3820";
+  for (let i = 0; i < 40; i++){
+    const gx = (i * 97) % 940 + 10, gy = GROUND_Y + 30 + ((i * 53) % 90);
+    ctx.fillRect(gx, gy, 10, 6);
+  }
+  // grass tufts
+  ctx.fillStyle = "#3f7d28";
+  for (let i = 0; i < 26; i++){
+    const gx = (i * 61) % 940 + 10;
+    ctx.fillRect(gx, GROUND_Y - 8, 6, 8);
+  }
+
+  // trapdoor + pit (under customer)
+  drawTrapdoor(t, branch, trapOpen, c);
+
+  // exposed mechanism (rear panel behind counter)
+  let inspProg = 0;
+  if (inspected && full.inspectTime != null) inspProg = clamp((t - full.inspectTime) / 0.6, 0, 1);
+  else if (inspected) inspProg = 1;
+  drawMechanism(inspProg, branch, t);
+
+  // counter
+  drawCounter();
+
+  // actors (order: merchant behind counter, then emerald, then customer)
+  drawMerchant(t, m, branch, held);
+  drawEmerald(t, e, held, branch);
+  drawCustomer(t, c, branch, held);
+
+  // phase vignette: anticipation freeze 12-14 (subtle dark edges)
+  if (t >= 12 && t < 14){
+    ctx.fillStyle = "rgba(10,10,30,0.10)";
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawCloud(x, y){
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x, y, 110, 26); ctx.fillRect(x + 18, y - 14, 64, 18); ctx.fillRect(x + 8, y + 20, 90, 10);
+}
+
+function drawCounter(){
+  // stone counter at x=0, top y=1.15
+  rect(-0.85, 0, 1.7, 1.15, "#8a8a8a");
+  rect(-0.85, 0.95, 1.7, 0.2, "#a8a8a8");
+  rect(-0.85, 0, 1.7, 0.12, "#6e6e6e");
+  // wood trim
+  rect(-0.9, 1.15, 1.8, 0.12, "#7a4a2b");
+  // cobble lines
+  ctx.fillStyle = "#6e6e6e";
+  ctx.fillRect(sx(-0.85), sy(0.6), 1.7 * SCALE, 3);
+  ctx.fillRect(sx(-0.85), sy(0.3), 1.7 * SCALE, 3);
+  // price sign (visual only, no story text needed beyond tiny label)
+  rect(-0.28, 1.27, 0.56, 0.34, "#f5e6b8");
+  ctx.fillStyle = "#5a3a1a"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+  ctx.fillText("BUYBACK", sx(0), sy(1.42) + 10);
+}
+
+function drawTrapdoor(t, branch, trapOpen, customerPos){
+  const tx = 2.7; // trapdoor center x
+  const tw = 1.25, th = 0.14;
+  // pit (dark hole) visible when open
+  if (trapOpen){
+    const p = clamp((t - 14) / 0.5, 0, 1);
+    rect(tx - tw / 2, -1.4, tw, 1.4, "#0a0a0a");
+    // door slab rotated open (draw as tilted slab)
+    ctx.save();
+    ctx.translate(sx(tx - tw / 2), sy(0));
+    ctx.rotate(-p * 1.35);
+    ctx.fillStyle = "#8a5a2b";
+    ctx.fillRect(0, -th * SCALE, tw * SCALE, th * SCALE);
+    ctx.fillStyle = "#6e4520";
+    ctx.fillRect(0, -th * SCALE, tw * SCALE, 4);
+    ctx.restore();
+    // dust puffs at opening (deterministic)
+    if (t >= 14 && t < 16){
+      const dp = (t - 14) / 2;
+      ctx.fillStyle = "rgba(200,180,150," + (0.5 * (1 - dp)).toFixed(3) + ")";
+      ctx.fillRect(sx(tx - 0.7) - dp * 30, sy(0.3) - dp * 20, 30 + dp * 60, 14);
+      ctx.fillRect(sx(tx + 0.2) + dp * 20, sy(0.15) - dp * 10, 26 + dp * 50, 12);
+    }
+  } else {
+    // closed hatch
+    rect(tx - tw / 2, 0, tw, th, "#8a5a2b");
+    rect(tx - tw / 2, 0.10, tw, 0.04, "#6e4520");
+    // hinges + handle
+    rect(tx - tw / 2 + 0.08, 0.14, 0.16, 0.05, "#3a3a3a");
+    rect(tx + tw / 2 - 0.24, 0.14, 0.16, 0.05, "#3a3a3a");
+    rect(tx - 0.07, 0.14, 0.14, 0.06, "#3a3a3a");
+    // in exposed branch, redstone dust highlights the hatch
+    if (branch === "exposed"){
+      ctx.fillStyle = "#ff2a2a";
+      ctx.fillRect(sx(tx - tw / 2), sy(0.16), tw * SCALE, 4);
+    }
+  }
+  // outline so the trap location reads even when closed
+  ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 2;
+  ctx.strokeRect(sx(tx - tw / 2), sy(th), tw * SCALE, th * SCALE);
+}
+
+function drawMechanism(prog, branch, t){
+  // rear panel behind merchant/counter: slides open when inspected
+  const px = -1.9, py = 0, pw = 1.1, ph = 2.0;
+  if (prog <= 0) return;
+  // panel frame
+  rect(px, py, pw, ph, "#5a5a5a");
+  // open cavity
+  const cw = pw * prog;
+  rect(px + 0.08, py + 0.15, cw, ph - 0.3, "#1a1a1a");
+  // gears + redstone inside (visible as it opens)
+  if (prog > 0.25){
+    const gx = px + 0.08 + cw * 0.3, gy = py + 0.9;
+    // gear
+    ctx.save(); ctx.translate(sx(gx), sy(gy)); ctx.rotate(t * 2.2);
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(-14, -14, 28, 28);
+    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(-6, -6, 12, 12);
+    ctx.restore();
+    // redstone dust trail to trapdoor
+    ctx.fillStyle = "#ff2a2a";
+    ctx.fillRect(sx(px + 0.5), sy(0.22), (2.7 - (px + 0.5)) * SCALE, 5);
+    ctx.fillRect(sx(2.7) - 2, sy(0.22), 4, 10);
+    // lever
+    rect(px + 0.55, py + 0.45, 0.1, 0.5, "#8a5a2b");
+    rect(px + 0.5, py + 0.95, 0.2, 0.12, "#ff2a2a");
+  }
+  // sliding door slab
+  rect(px + 0.08 + cw, py + 0.15, pw - 0.16 - cw, ph - 0.3, "#7a4a2b");
+}
+
+function drawMerchant(t, m, branch, held){
+  const x = m[0], y = m[1];
+  const bob = 0.05 * Math.sin(t * 2.1);
+  const feetY = y + bob * 0.3;
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath(); ctx.ellipse(sx(x), sy(feetY) + 4, 34, 8, 0, 0, Math.PI * 2); ctx.fill();
+  // robe (brown villager)
+  rect(x - 0.34, feetY, 0.68, 1.05, "#6b4a2f");
+  rect(x - 0.34, feetY + 0.85, 0.68, 0.2, "#54381f");
+  // belt
+  rect(x - 0.34, feetY + 0.62, 0.68, 0.08, "#3a2a18");
+  // head
+  rect(x - 0.26, feetY + 1.05, 0.52, 0.5, "#d9a066");
+  // big nose
+  rect(x + 0.05, feetY + 1.18, 0.34, 0.16, "#c98a4a");
+  // unibrow + eyes
+  rect(x - 0.2, feetY + 1.32, 0.4, 0.07, "#2b1d0f");
+  rect(x - 0.14, feetY + 1.22, 0.09, 0.09, "#1a1a1a");
+  rect(x + 0.12, feetY + 1.22, 0.09, 0.09, "#1a1a1a");
+  // mouth
+  rect(x - 0.1, feetY + 1.1, 0.2, 0.05, "#2b1d0f");
+  // arms by pose
+  let armL = 0, armR = 0; // angles-ish: -1 down, 1 up/out
+  if (t < 4){ armR = 0.9; armL = 0.2; } // offering
+  else if (t < 12){ armR = 0.7 + 0.3 * Math.sin(t * 5); armL = 0.6 + 0.3 * Math.sin(t * 5 + 1); } // distracting wave
+  else if (branch === "trap" && t >= 14){ armR = 1; armL = 1; } // celebrate
+  else if (branch === "safe"){ armR = -0.6; armL = -0.6; } // slump
+  else if (branch === "exposed"){ armR = 0.8; armL = 0.8; } // nervous up
+  else { armR = 0.1; armL = 0.1; } // freeze
+  drawArm(x - 0.34, feetY + 0.95, armL, "#6b4a2f", "#d9a066");
+  drawArm(x + 0.34, feetY + 0.95, armR, "#6b4a2f", "#d9a066");
+  // sweat in exposed
+  if (branch === "exposed" && t >= 12){
+    ctx.fillStyle = "#7dd3ff";
+    const sy1 = sy(feetY + 1.5) + 6 * Math.sin(t * 6);
+    ctx.fillRect(sx(x - 0.4), sy1, 6, 10);
+    ctx.fillRect(sx(x + 0.34), sy1 + 8, 6, 10);
+  }
+  // celebrate sparkles in trap
+  if (branch === "trap" && t >= 14 && t < 17){
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillRect(sx(x - 0.5), sy(feetY + 1.7), 8, 8);
+    ctx.fillRect(sx(x + 0.45), sy(feetY + 1.9), 8, 8);
+  }
+}
+
+function drawArm(ax, ay, pose, sleeve, hand){
+  // simple blocky arm: sleeve rect + hand rect, pose shifts hand up/out
+  const hx = ax + (ax < 0 ? -0.06 : 0.06) * (1 + pose * 0.4);
+  const hy = ay + pose * 0.22;
+  rect(ax - 0.09, ay, 0.18, 0.42, sleeve);
+  rect(hx - 0.09, hy + 0.3, 0.18, 0.16, hand);
+}
+
+function drawCustomer(t, c, branch, held){
+  const x = c[0], y = c[1];
+  const fallen = (branch === "trap" && t >= 14);
+  // shadow (fades as falls)
+  if (!fallen){
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.beginPath(); ctx.ellipse(sx(x), sy(y) + 4, 32, 8, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // legs
+  rect(x - 0.22, y, 0.18, 0.55, "#3a5fcd");
+  rect(x + 0.04, y, 0.18, 0.55, "#3a5fcd");
+  // shoes
+  rect(x - 0.24, y, 0.22, 0.1, "#5a3a1a");
+  rect(x + 0.02, y, 0.22, 0.1, "#5a3a1a");
+  // torso (cyan shirt)
+  rect(x - 0.3, y + 0.55, 0.6, 0.55, "#2ec4d6");
+  rect(x - 0.3, y + 0.55, 0.6, 0.08, "#1fa8bc");
+  // head
+  rect(x - 0.24, y + 1.1, 0.48, 0.46, "#e8b88a");
+  // hair
+  rect(x - 0.24, y + 1.38, 0.48, 0.18, "#5a3a1a");
+  // eyes
+  rect(x - 0.14, y + 1.24, 0.08, 0.08, "#1a1a1a");
+  rect(x + 0.06, y + 1.24, 0.08, 0.08, "#1a1a1a");
+  // mouth: smile / O / worried by phase
+  if (fallen){ rect(x - 0.08, y + 1.14, 0.16, 0.1, "#1a1a1a"); }
+  else if (branch === "safe" && t >= 12){ rect(x - 0.1, y + 1.16, 0.2, 0.05, "#1a1a1a"); }
+  else if (t >= 4 && t < 12){ rect(x - 0.07, y + 1.15, 0.14, 0.07, "#1a1a1a"); }
+  else { rect(x - 0.09, y + 1.17, 0.18, 0.04, "#1a1a1a"); }
+
+  // arms
+  let reach = 0; // 0 down, 1 reaching toward counter/emerald
+  if (t < 4) reach = 0.6;
+  else if (t < 12) reach = held ? 0.9 : 0.55 + 0.2 * Math.sin(t * 3);
+  else if (branch === "safe") reach = 1;
+  else if (branch === "exposed") reach = 1;
+  else if (branch === "trap" && t >= 14) reach = -1; // flail up
+  else reach = 0.2;
+  // left arm (toward counter)
+  drawCustomerArm(x - 0.3, y + 1.02, reach, "#2ec4d6", "#e8b88a", -1);
+  // right arm
+  drawCustomerArm(x + 0.3, y + 1.02, reach * 0.8, "#2ec4d6", "#e8b88a", 1);
+}
+
+function drawCustomerArm(ax, ay, reach, sleeve, hand, side){
+  const hx = ax + side * (0.06 + reach * 0.28);
+  const hy = ay + (reach === -1 ? 0.3 : reach * 0.12);
+  rect(ax - 0.09, ay, 0.18, 0.4, sleeve);
+  rect(hx - 0.09, hy + 0.28, 0.18, 0.16, hand);
+}
+
+function drawEmerald(t, e, held, branch){
+  const x = e[0], y = e[1];
+  // shadow on counter when not held
+  if (!held){
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(sx(x), sy(1.27) + 2, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // warning tilt
+  let tilt = 0;
+  if (t >= 4 && t < 12 && !held) tilt = 0.35 * Math.sin(t * 4.5);
+  else if (branch === "exposed" && t >= 12) tilt = 0.3;
+  ctx.save();
+  ctx.translate(sx(x), sy(y + 0.16));
+  ctx.rotate(tilt);
+  // gem body (diamond)
+  const s = 16;
+  ctx.fillStyle = "#2ee66b";
+  ctx.beginPath();
+  ctx.moveTo(0, -s); ctx.lineTo(s * 0.8, 0); ctx.lineTo(0, s); ctx.lineTo(-s * 0.8, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#a8f5c0";
+  ctx.beginPath();
+  ctx.moveTo(0, -s); ctx.lineTo(s * 0.8, 0); ctx.lineTo(0, 0); ctx.lineTo(-s * 0.8, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#0f7a33";
+  ctx.fillRect(-s * 0.8, -2, s * 1.6, 4);
+  ctx.restore();
+  // glint sparkles (deterministic)
+  if (t < 4 || held){
+    const gl = (Math.sin(t * 6) + 1) / 2;
+    if (gl > 0.7){
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(sx(x) + 10, sy(y + 0.3), 4, 4);
+      ctx.fillRect(sx(x) - 14, sy(y + 0.18), 3, 3);
+    }
+  }
+  // warning hops: little motion ticks toward trapdoor
+  if (t >= 4 && t < 12 && !held){
+    ctx.fillStyle = "#0f7a33";
+    const dir = Math.sin(t * 4.5) > 0 ? 1 : -1;
+    ctx.fillRect(sx(x) + dir * 18, sy(y + 0.1), 6, 3);
+  }
+}
+
+// ---------- playback loop (simulated time, speed-independent) ----------
+let lastNow = null;
+function loop(now){
+  if (lastNow == null) lastNow = now;
+  const dt = Math.min(0.1, (now - lastNow) / 1000);
+  lastNow = now;
+  if (playing){
+    currentTime += dt * speed;
+    if (currentTime >= 20){ currentTime = 20; playing = false; }
+    render();
+    syncUI();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- controls wiring ----------
+$("btnPlay").addEventListener("click", () => {
+  if (currentTime >= 20 && !playing){ currentTime = 0; } // replay from end
+  playing = !playing;
+  syncUI();
+});
+$("seek").addEventListener("input", (ev) => {
+  currentTime = clamp(parseFloat(ev.target.value) || 0, 0, 20);
+  render();
+});
+$("sp05").addEventListener("click", () => { speed = 0.5; syncUI(); });
+$("sp1").addEventListener("click", () => { speed = 1; syncUI(); });
+$("sp2").addEventListener("click", () => { speed = 2; syncUI(); });
+$("btnTake").addEventListener("click", () => addInput("take"));
+$("btnReturn").addEventListener("click", () => addInput("return"));
+$("btnInspect").addEventListener("click", () => addInput("inspect"));
+$("btnReset").addEventListener("click", resetAll);
+
+function onOrigin(){
+  const nx = parseFloat($("ox").value), ny = parseFloat($("oy").value), nz = parseFloat($("oz").value);
+  origin = [Number.isFinite(nx) ? nx : 0, Number.isFinite(ny) ? ny : 0, Number.isFinite(nz) ? nz : 0];
+  render();
+}
+$("ox").addEventListener("change", onOrigin);
+$("oy").addEventListener("change", onOrigin);
+$("oz").addEventListener("change", onOrigin);
+
+// ---------- public bench API (drives the actual displayed scene) ----------
+window.sceneBench = {
+  evaluate: function (arg){
+    const a = (arg && typeof arg === "object") ? arg : {};
+    const time = a.time, actions = a.actions, org = a.origin;
+    // compute via the same pure core used for rendering; do not mutate args
+    const full = computeFull(time, actions, org);
+    // drive the displayed scene to this state
+    currentTime = full.t;
+    // recorded inputs become the accepted actions (sorted copy) so playback agrees
+    recordedInputs = full.accepted.map(x => ({ time: x.time, type: x.type }));
+    origin = full.origin.slice();
+    playing = false; // hold the evaluated frame for inspection
+    syncUI();
+    render();
+    // return a fresh JSON-compatible snapshot (deep copy)
+    const s = full.snapshot;
+    return {
+      branch: s.branch,
+      held: s.held,
+      inspected: s.inspected,
+      trapOpen: s.trapOpen,
+      actors: {
+        merchant: [s.actors.merchant[0], s.actors.merchant[1], s.actors.merchant[2]],
+        customer: [s.actors.customer[0], s.actors.customer[1], s.actors.customer[2]],
+        emerald: [s.actors.emerald[0], s.actors.emerald[1], s.actors.emerald[2]]
+      }
+    };
+  }
+};
+
+// expose core for headless checks (same function used by UI)
+window.__sceneCore = { computeFull: computeFull };
+
+syncUI();
+render();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
